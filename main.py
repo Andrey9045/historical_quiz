@@ -1,49 +1,85 @@
 import os
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Updater, CallbackContext, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CallbackContext, CommandHandler, MessageHandler, Filters, ConversationHandler, RegexHandler
+from keyboards import control_buttons
+import redis
 
 
-#name_fiels = ['1vs1200.txt']
+from service import checking_answer, get_random_question_answer, clearing_answer, create_answers_questions 
 
 
+QUESTION, ANSWER, PASS = range(3)
 
-#with open(f'quiz/{name_fiels[0]}', 'r', encoding="KOI8-R") as my_file:
-#	content = my_file.read()
-#blocks = content.split('\n\n')
-#blocks = [block.strip() for block in blocks if block.strip()]
-#start_idx = 0
-#for i, item in enumerate(blocks):
-#	if "Вопрос" in item:
-#	    start_idx = i
-#	    break
-#blocks = blocks[start_idx:]
-#filtered = [block for block in blocks if not("Автор:" in block or "Источник:" in block)]
-#answer_question = {}
-#for item in range(0, len(filtered)-1, 2):
-#    q_block = filtered[item]
-#    a_block = filtered[item + 1]
-#    if "Вопрос" in q_block and "Ответ" in a_block:
-#    	key = q_block.strip()
-#    	values = a_block.strip()
-#    	answer_question[key] = values
-#print(answer_question)
 
 def start(update: Update, context: CallbackContext):
-	context.bot.send_message(chat_id=update.effective_chat.id, text='Привет')
+	context.bot.send_message(chat_id=update.effective_chat.id, text='Привет) Нажми на "Новый вопрос"', reply_markup=control_buttons())
+	return QUESTION
 
-def echo(update: Update, context: CallbackContext):
-	context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
+def handle_new_question_request(update: Update, context: CallbackContext):
+    text = update.message.text
+    user_id = update.effective_user.id
+    redis_client = context.bot_data['redis']
+    question, answer = get_random_question_answer()
+    redis_client.set(f"Вопрос {user_id}", question)
+    redis_client.set(f"Ответ {user_id}", answer)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
+    return ANSWER
+
+def handle_solution_attempt(update: Update, context: CallbackContext):
+    text = update.message.text
+    user_id = update.effective_user.id
+    redis_client = context.bot_data['redis']
+    answer = redis_client.get(f"Ответ {user_id}")
+    if not checking_answer(text, answer):
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Ответ не верный, попробуй еще раз)", reply_markup=control_buttons())
+        return ANSWER
+    else:
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Совершенно верно, бери новый вопрос)", reply_markup=control_buttons())
+        return QUESTION
+
+def show_correct_answer(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    redis_client = context.bot_data['redis']
+    answer = redis_client.get(f"Ответ {user_id}")
+    context.bot.send_message(chat_id=update.effective_chat.id, text=answer, reply_markup=control_buttons())
+    question, answer = get_random_question_answer()
+    redis_client.set(f"Вопрос {user_id}", question)
+    redis_client.set(f"Ответ {user_id}", answer)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
+    return ANSWER
+
+def cancel():
+    pass
+
 
 if __name__ == '__main__':
     load_dotenv()
     tg_token = os.environ['TG_TOKEN']
+    redis_host = os.environ['REDIS_HOST']
+    redis_port = os.environ['REDIS_PORT']
+    redis_password = os.environ['REDIS_PASSWORD']
+    r = redis.Redis(
+        host=redis_host,
+        port=redis_port,
+        password=redis_password,
+        decode_responses=True)
+    r.ping()
     updater = Updater(token=tg_token, use_context=True)
-    dispatcher = updater.dispatcher
-    start_handler = CommandHandler('start', start)
-    echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)
-    dispatcher.add_handler(start_handler)
-    dispatcher.add_handler(echo_handler)
+    dp = updater.dispatcher
+    dp.bot_data['redis'] = r
+    conv_handler = ConversationHandler(
+    	entry_points=[CommandHandler('start', start)],
+    	states={
+    	    QUESTION: [RegexHandler('Новый вопрос', handle_new_question_request)],
+    	    ANSWER: [
+                RegexHandler('Сдаться', show_correct_answer),
+                MessageHandler(Filters.text, handle_solution_attempt)
+            ],
+    	},
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    dp.add_handler(conv_handler)
 
     updater.start_polling()
     updater.idle()
