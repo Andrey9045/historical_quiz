@@ -63,11 +63,11 @@ if __name__ == '__main__':
     redis_port = os.environ['REDIS_PORT']
     redis_password = os.environ['REDIS_PASSWORD']
     parser = argparse.ArgumentParser(
-        description='Добавить путь до файла с вопосами'
+        description='Имя файла с вопосами'
     )
-    parser.add_argument('path', help='Путь до файла с вопросами')
+    parser.add_argument('filename', help='Имя файла с вопросами')
     args = parser.parse_args()
-    path = args.path
+    filename = args.filename
     r = redis.Redis(
         host=redis_host,
         port=redis_port,
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     updater = Updater(token=tg_token, use_context=True)
     dp = updater.dispatcher
     dp.bot_data['redis'] = r
-    dp.bot_data['path'] = path
+    dp.bot_data['filename'] = filename
     conv_handler = ConversationHandler(
     	entry_points=[CommandHandler('start', start)],
     	states={

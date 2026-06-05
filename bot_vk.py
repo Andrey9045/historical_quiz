@@ -1,4 +1,5 @@
 import os
+import argparse
 from dotenv import load_dotenv
 import vk_api as vk
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
@@ -34,16 +35,16 @@ def send_message(vk_api, peer_id, text, keyboard=None):
 
     vk_api.messages.send(**params)
 
-def handle_new_question_request(vk_api, peer_id, redis_client):
-    question, answer = get_random_question_answer()
+def handle_new_question_request(vk_api, peer_id, redis_client, filename):
+    question, answer = get_random_question_answer(filename)
     redis_client.set(f"Вопрос {peer_id}", question)
     redis_client.set(f"Ответ {peer_id}", answer)
     send_message(vk_api, peer_id, question, get_keyboard())
 
-def show_correct_answer(vk_api, peer_id, redis_client):
+def show_correct_answer(vk_api, peer_id, redis_client, filename):
     answer = redis_client.get(f"Ответ {peer_id}")
     send_message(vk_api, peer_id, answer, get_keyboard())
-    question, answer = get_random_question_answer()
+    question, answer = get_random_question_answer(filename)
     redis_client.set(f"Вопрос {peer_id}", question)
     redis_client.set(f"Ответ {peer_id}", answer)
     send_message(vk_api, peer_id, question, get_keyboard())
@@ -61,6 +62,12 @@ if __name__ == '__main__':
     redis_host = os.environ['REDIS_HOST']
     redis_port = os.environ['REDIS_PORT']
     redis_password = os.environ['REDIS_PASSWORD']
+    parser = argparse.ArgumentParser(
+        discriptions = "Имя файла с вопросами"
+    )
+    parser.add_argument('filename', help='Введите имя файла с вопросами')
+    args = parser.parse_args()
+    filename = args.filename
     r = redis.Redis(
         host=redis_host,
         port=redis_port,
@@ -76,12 +83,9 @@ if __name__ == '__main__':
             text = event.text.strip()
             peer_id = event.peer_id
             if event.text == "Новый вопрос":
-                handle_new_question_request(vk_api, peer_id, r)
+                handle_new_question_request(vk_api, peer_id, r, filename)
             elif event.text == "Сдаться":
-                show_correct_answer(vk_api, peer_id, r)
+                show_correct_answer(vk_api, peer_id, r, filename)
             else:
                 handle_solution_attempt(vk_api, peer_id, r, event.text)
-
-            #    handle_new_question_request(event, vk_api, keyboard)
-            #echo(event, vk_api, keyboard) 
 
