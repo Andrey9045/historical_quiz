@@ -7,7 +7,7 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.utils import get_random_id
 import redis
 
-from service import checking_answer, get_random_question_answer, clearing_answer, create_answers_questions
+from receiving_questions_and_checking_answer import is_correct, get_random_question_answer, normalize_answer, create_answers_questions
 
 def get_keyboard():
     keyboard = VkKeyboard(one_time=True)
@@ -15,14 +15,6 @@ def get_keyboard():
     keyboard.add_line()
     keyboard.add_button('Сдаться', color=VkKeyboardColor.NEGATIVE)
     return keyboard
-
-def echo(event, vk_api, keyboard):
-    vk_api.messages.send(
-        user_id=event.user_id,
-        message=event.text,
-        random_id=random.randint(1, 1000),
-        keyboard=keyboard.get_keyboard()
-    )
 
 def send_message(vk_api, peer_id, text, keyboard=None):
     params = {
@@ -35,57 +27,62 @@ def send_message(vk_api, peer_id, text, keyboard=None):
 
     vk_api.messages.send(**params)
 
-def handle_new_question_request(vk_api, peer_id, redis_client, filename):
-    question, answer = get_random_question_answer(filename)
+def handle_new_question_request(vk_api, peer_id, redis_client, questions_answers):
+    question, answer = get_random_question_answer(questions_answers)
     redis_client.set(f"Вопрос {peer_id}", question)
     redis_client.set(f"Ответ {peer_id}", answer)
     send_message(vk_api, peer_id, question, get_keyboard())
 
-def show_correct_answer(vk_api, peer_id, redis_client, filename):
+def show_correct_answer(vk_api, peer_id, redis_client, questions_answers):
     answer = redis_client.get(f"Ответ {peer_id}")
     send_message(vk_api, peer_id, answer, get_keyboard())
-    question, answer = get_random_question_answer(filename)
+    question, answer = get_random_question_answer(questions_answers)
     redis_client.set(f"Вопрос {peer_id}", question)
     redis_client.set(f"Ответ {peer_id}", answer)
     send_message(vk_api, peer_id, question, get_keyboard())
 
 def handle_solution_attempt(vk_api, peer_id, redis_client, text):
     answer = redis_client.get(f"Ответ {peer_id}")
-    if not checking_answer(text, answer):
-        send_message(vk_api, peer_id, "Ответ не верный, попробуй еще раз)", get_keyboard())
-    else:
+    if is_correct(text, answer):
         send_message(vk_api, peer_id, "Совершенно верно, бери новый вопрос)", get_keyboard())
+    else:
+        send_message(vk_api, peer_id, "Ответ не верный, попробуй еще раз)", get_keyboard())
 
-if __name__ == '__main__':
+def main():
     load_dotenv()
     vk_token = os.environ["VK_TOKEN"]
     redis_host = os.environ['REDIS_HOST']
     redis_port = os.environ['REDIS_PORT']
     redis_password = os.environ['REDIS_PASSWORD']
     parser = argparse.ArgumentParser(
-        discriptions = "Имя файла с вопросами"
+        description = "Имя файла с вопросами"
     )
     parser.add_argument('filename', help='Введите имя файла с вопросами')
     args = parser.parse_args()
     filename = args.filename
-    r = redis.Redis(
+    questions_answers = create_answers_questions(filename)
+    redis_client = redis.Redis(
         host=redis_host,
         port=redis_port,
         password=redis_password,
         decode_responses=True)
-    r.ping()
+    redis_client.ping()
 
     vk_session = vk.VkApi(token=vk_token)
     vk_api = vk_session.get_api()
     longpoll = VkLongPoll(vk_session)
     for event in longpoll.listen():
-        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-            text = event.text.strip()
-            peer_id = event.peer_id
-            if event.text == "Новый вопрос":
-                handle_new_question_request(vk_api, peer_id, r, filename)
-            elif event.text == "Сдаться":
-                show_correct_answer(vk_api, peer_id, r, filename)
-            else:
-                handle_solution_attempt(vk_api, peer_id, r, event.text)
+        if not (event.type == VkEventType.MESSAGE_NEW and event.to_me):
+            continue
+        text = event.text.strip()
+        peer_id = event.peer_id
+        if event.text == "Новый вопрос":
+            handle_new_question_request(vk_api, peer_id, redis_client, questions_answers)
+        elif event.text == "Сдаться":
+            show_correct_answer(vk_api, peer_id, redis_client, questions_answers)
+        else:
+            handle_solution_attempt(vk_api, peer_id, redis_client, event.text)
+
+if __name__ == '__main__':
+    main()
 

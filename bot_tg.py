@@ -7,10 +7,10 @@ from keyboards import control_buttons
 import redis
 
 
-from service import checking_answer, get_random_question_answer, clearing_answer, create_answers_questions 
+from receiving_questions_and_checking_answer import is_correct, get_random_question_answer, normalize_answer, create_answers_questions 
 
 
-QUESTION, ANSWER, PASS = range(3)
+QUESTION, ANSWER = range(2)
 
 
 def start(update: Update, context: CallbackContext):
@@ -21,8 +21,9 @@ def handle_new_question_request(update: Update, context: CallbackContext):
     text = update.message.text
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
-    path = context.bot_data['path']
-    question, answer = get_random_question_answer(path)
+    filename = context.bot_data['filename']
+    questions_answers = context.bot_data['questions_answers']
+    question, answer = get_random_question_answer(questions_answers)
     redis_client.set(f"Вопрос {user_id}", question)
     redis_client.set(f"Ответ {user_id}", answer)
     context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
@@ -33,27 +34,33 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
     answer = redis_client.get(f"Ответ {user_id}")
-    if not checking_answer(text, answer):
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Ответ не верный, попробуй еще раз)", reply_markup=control_buttons())
-        return ANSWER
-    else:
+    if is_correct(text, answer):
         context.bot.send_message(chat_id=update.effective_chat.id, text="Совершенно верно, бери новый вопрос)", reply_markup=control_buttons())
         return QUESTION
+    else:
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Ответ не верный, попробуй еще раз)", reply_markup=control_buttons())
+        return ANSWER
 
 def show_correct_answer(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
-    path = context.bot_data['path']
+    filename = context.bot_data['filename']
+    questions_answers = context.bot_data['questions_answers']
     answer = redis_client.get(f"Ответ {user_id}")
     context.bot.send_message(chat_id=update.effective_chat.id, text=answer, reply_markup=control_buttons())
-    question, answer = get_random_question_answer(path)
+    question, answer = get_random_question_answer(questions_answers)
     redis_client.set(f"Вопрос {user_id}", question)
     redis_client.set(f"Ответ {user_id}", answer)
     context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
     return ANSWER
 
-def cancel():
-    pass
+def cancel(update: Update, context: CallbackContext):
+    context.bot.send_message(
+        chat_id=update.effective_chat.id, 
+        text="Работа с ботом завершена, для запуска напишите /start",
+        reply_markup=control_buttons()
+    )
+    return ConversationHandler.END
 
 
 if __name__ == '__main__':
@@ -65,19 +72,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Имя файла с вопосами'
     )
-    parser.add_argument('filename', help='Имя файла с вопросами')
+    parser.add_argument('filename', help='Введите имя файла с вопросами')
     args = parser.parse_args()
     filename = args.filename
-    r = redis.Redis(
+    questions_answers = create_answers_questions(filename)
+    redis_client = redis.Redis(
         host=redis_host,
         port=redis_port,
         password=redis_password,
         decode_responses=True)
-    r.ping()
+    redis_client.ping()
     updater = Updater(token=tg_token, use_context=True)
     dp = updater.dispatcher
-    dp.bot_data['redis'] = r
+    dp.bot_data['redis'] = redis_client
     dp.bot_data['filename'] = filename
+    dp.bot_data['questions_answers'] = questions_answers
     conv_handler = ConversationHandler(
     	entry_points=[CommandHandler('start', start)],
     	states={
