@@ -2,7 +2,7 @@ import os
 import random
 import re
 
-def create_answers_questions(path):
+def create_answers_questions(filename):
     base_dir = "quiz"
     full_path = os.path.join(base_dir, filename)
     with open(full_path, 'r', encoding="KOI8-R") as my_file:
@@ -10,9 +10,9 @@ def create_answers_questions(path):
     blocks = content.split('\n\n')
     blocks = [block.strip() for block in blocks if block.strip()]
     start_idx = 0
-    for i, item in enumerate(blocks):
-    	if "Вопрос" in item:
-    	    start_idx = i
+    for index, block in enumerate(blocks):
+    	if "Вопрос" in block:
+    	    start_idx = index
     	    break
     blocks = blocks[start_idx:]
     filtered = [block for block in blocks if not("Автор:" in block or "Источник:" in block)]
@@ -35,8 +35,8 @@ def clearing_answer(answer):
     print(result)
     return result.strip().lower()
 
-def get_random_question_answer(path):
-    answer_question = create_answers_questions(path)
+def get_random_question_answer(filename):
+    answer_question = create_answers_questions(filename)
     question, answer = random.choice(list(answer_question.items()))
     answer = clearing_answer(answer)
     return question, answer
