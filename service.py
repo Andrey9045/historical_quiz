@@ -1,8 +1,11 @@
+import os
 import random
 import re
 
 def create_answers_questions(path):
-    with open(f'{path}', 'r', encoding="KOI8-R") as my_file:
+    base_dir = "quiz"
+    full_path = os.path.join(base_dir, filename)
+    with open(full_path, 'r', encoding="KOI8-R") as my_file:
     	content = my_file.read()
     blocks = content.split('\n\n')
     blocks = [block.strip() for block in blocks if block.strip()]
