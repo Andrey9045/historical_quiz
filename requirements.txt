@@ -1,6 +1,5 @@
 python-telegram-bot==13.14
 urllib3==1.26.18
-standard-imghdr
 vk-api==11.10.0
 python-dotenv==1.2.2
 redis==8.0.0

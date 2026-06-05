@@ -1,9 +1,8 @@
 import random
 import re
 
-def create_answers_questions():
-    name_fiels = ['1vs1200.txt']
-    with open(f'quiz/{name_fiels[0]}', 'r', encoding="KOI8-R") as my_file:
+def create_answers_questions(path):
+    with open(f'{path}', 'r', encoding="KOI8-R") as my_file:
     	content = my_file.read()
     blocks = content.split('\n\n')
     blocks = [block.strip() for block in blocks if block.strip()]
@@ -33,8 +32,8 @@ def clearing_answer(answer):
     print(result)
     return result.strip().lower()
 
-def get_random_question_answer():
-    answer_question = create_answers_questions()
+def get_random_question_answer(path):
+    answer_question = create_answers_questions(path)
     question, answer = random.choice(list(answer_question.items()))
     answer = clearing_answer(answer)
     return question, answer

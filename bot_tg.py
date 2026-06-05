@@ -1,4 +1,5 @@
 import os
+import argparse
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Updater, CallbackContext, CommandHandler, MessageHandler, Filters, ConversationHandler, RegexHandler
@@ -20,7 +21,8 @@ def handle_new_question_request(update: Update, context: CallbackContext):
     text = update.message.text
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
-    question, answer = get_random_question_answer()
+    path = context.bot_data['path']
+    question, answer = get_random_question_answer(path)
     redis_client.set(f"Вопрос {user_id}", question)
     redis_client.set(f"Ответ {user_id}", answer)
     context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
@@ -41,9 +43,10 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
 def show_correct_answer(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
+    path = context.bot_data['path']
     answer = redis_client.get(f"Ответ {user_id}")
     context.bot.send_message(chat_id=update.effective_chat.id, text=answer, reply_markup=control_buttons())
-    question, answer = get_random_question_answer()
+    question, answer = get_random_question_answer(path)
     redis_client.set(f"Вопрос {user_id}", question)
     redis_client.set(f"Ответ {user_id}", answer)
     context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
@@ -59,6 +62,12 @@ if __name__ == '__main__':
     redis_host = os.environ['REDIS_HOST']
     redis_port = os.environ['REDIS_PORT']
     redis_password = os.environ['REDIS_PASSWORD']
+    parser = argparse.ArgumentParser(
+        description='Добавить путь до файла с вопосами'
+    )
+    parser.add_argument('path', help='Путь до файла с вопросами')
+    args = parser.parse_args()
+    path = args.path
     r = redis.Redis(
         host=redis_host,
         port=redis_port,
@@ -68,6 +77,7 @@ if __name__ == '__main__':
     updater = Updater(token=tg_token, use_context=True)
     dp = updater.dispatcher
     dp.bot_data['redis'] = r
+    dp.bot_data['path'] = path
     conv_handler = ConversationHandler(
     	entry_points=[CommandHandler('start', start)],
     	states={
