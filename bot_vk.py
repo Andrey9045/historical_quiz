@@ -7,7 +7,7 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.utils import get_random_id
 import redis
 
-from receiving_questions_and_checking_answer import is_correct, get_random_question_answer, normalize_answer, create_answers_questions
+from quiz_core import is_correct, get_random_question_answer, normalize_answer, create_answers_questions
 
 def get_keyboard():
     keyboard = VkKeyboard(one_time=True)

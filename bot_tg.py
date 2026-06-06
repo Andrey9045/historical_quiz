@@ -7,7 +7,7 @@ from keyboards import control_buttons
 import redis
 
 
-from receiving_questions_and_checking_answer import is_correct, get_random_question_answer, normalize_answer, create_answers_questions 
+from quiz_core import is_correct, get_random_question_answer, normalize_answer, create_answers_questions 
 
 
 QUESTION, ANSWER = range(2)
