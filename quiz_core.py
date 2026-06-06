@@ -2,6 +2,7 @@ import os
 import random
 import re
 
+
 def create_answers_questions(filename):
     base_dir = "quiz"
     full_path = os.path.join(base_dir, filename)
@@ -34,10 +35,12 @@ def normalize_answer(answer):
     cleaned_answer = parts[0] if parts else text
     return cleaned_answer.strip().lower()
 
+
 def get_random_question_answer(questions_answers):
     question, answer = random.choice(list(questions_answers.items()))
     answer = normalize_answer(answer)
     return question, answer
+
 
 def is_correct(text, answer):
 	return  text.strip().lower() == answer
