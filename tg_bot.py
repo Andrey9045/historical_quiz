@@ -6,28 +6,35 @@ from telegram.ext import Updater, CallbackContext, CommandHandler, MessageHandle
 from keyboards import control_buttons
 import redis
 
-
-from quiz_core import is_correct, get_random_question_answer, normalize_answer, create_answers_questions 
+from quiz_core import is_correct, get_random_question_answer, create_answers_questions 
 
 
 QUESTION, ANSWER = range(2)
 
 
 def start(update: Update, context: CallbackContext):
-	context.bot.send_message(chat_id=update.effective_chat.id, text='Привет) Нажми на "Новый вопрос"', reply_markup=control_buttons())
-	return QUESTION
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text='Привет) Нажми на "Новый вопрос"',
+        reply_markup=control_buttons()
+    )
+    return QUESTION
+
 
 def handle_new_question_request(update: Update, context: CallbackContext):
-    text = update.message.text
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
-    filename = context.bot_data['filename']
     questions_answers = context.bot_data['questions_answers']
     question, answer = get_random_question_answer(questions_answers)
     redis_client.set(f"Вопрос {user_id}", question)
     redis_client.set(f"Ответ {user_id}", answer)
-    context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=question,
+        reply_markup=control_buttons()
+    )
     return ANSWER
+
 
 def handle_solution_attempt(update: Update, context: CallbackContext):
     text = update.message.text
@@ -35,24 +42,40 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
     redis_client = context.bot_data['redis']
     answer = redis_client.get(f"Ответ {user_id}")
     if is_correct(text, answer):
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Совершенно верно, бери новый вопрос)", reply_markup=control_buttons())
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Совершенно верно, бери новый вопрос)", 
+            reply_markup=control_buttons()
+        )
         return QUESTION
-    else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="Ответ не верный, попробуй еще раз)", reply_markup=control_buttons())
-        return ANSWER
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Ответ не верный, попробуй еще раз)",
+        reply_markup=control_buttons()
+    )
+    return ANSWER
+
 
 def show_correct_answer(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     redis_client = context.bot_data['redis']
-    filename = context.bot_data['filename']
     questions_answers = context.bot_data['questions_answers']
     answer = redis_client.get(f"Ответ {user_id}")
-    context.bot.send_message(chat_id=update.effective_chat.id, text=answer, reply_markup=control_buttons())
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=answer,
+        reply_markup=control_buttons()
+    )
     question, answer = get_random_question_answer(questions_answers)
     redis_client.set(f"Вопрос {user_id}", question)
     redis_client.set(f"Ответ {user_id}", answer)
-    context.bot.send_message(chat_id=update.effective_chat.id, text=question, reply_markup=control_buttons())
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=question,
+        reply_markup=control_buttons()
+    )
     return ANSWER
+
 
 def cancel(update: Update, context: CallbackContext):
     context.bot.send_message(
@@ -70,7 +93,7 @@ if __name__ == '__main__':
     redis_port = os.environ['REDIS_PORT']
     redis_password = os.environ['REDIS_PASSWORD']
     parser = argparse.ArgumentParser(
-        description='Имя файла с вопосами'
+        description='Имя файла с вопросами'
     )
     parser.add_argument('filename', help='Введите имя файла с вопросами')
     args = parser.parse_args()
@@ -88,14 +111,14 @@ if __name__ == '__main__':
     dp.bot_data['filename'] = filename
     dp.bot_data['questions_answers'] = questions_answers
     conv_handler = ConversationHandler(
-    	entry_points=[CommandHandler('start', start)],
-    	states={
-    	    QUESTION: [RegexHandler('Новый вопрос', handle_new_question_request)],
-    	    ANSWER: [
-                RegexHandler('Сдаться', show_correct_answer),
+        entry_points=[CommandHandler('start', start)],
+        states={
+            QUESTION: [MessageHandler(Filters.regex('^Новый вопрос$'), handle_new_question_request)],
+            ANSWER: [
+                MessageHandler(Filters.regex('^Сдаться$'), show_correct_answer),
                 MessageHandler(Filters.text, handle_solution_attempt)
             ],
-    	},
+        },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
     dp.add_handler(conv_handler)
